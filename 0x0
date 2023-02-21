@@ -1,0 +1,38 @@
+#!/usr/bin/env bash
+# vim:et:sw=4:ts=4:fenc=utf-8:
+# 0x0: quickly upload to 0x0.st (and get nonce)
+
+do_request() {
+    result="$(curl -vs -F"$1" https://0x0.st 2>"$2")"
+    exitcode=$?
+    awk <"$2" '/x-token:/ { print $4 }' >&2
+    echo "$result"
+    exit $exitcode
+}
+
+if [ $# -gt 1 ] || [ "$1" == '-h' ] || [ "$1" == '--help' ]; then
+    echo "usage: 0x0" >&2
+    echo "       0x0 <file_path>" >&2
+    echo "       0x0 <url>" >&2
+    exit 0
+fi
+
+output=$(mktemp)
+if [ -z "$1" ]; then
+    do_request 'file=@-' "$output"
+elif [ -f "$1" ]; then
+    do_request "file=@$1" "$output"
+else 
+    target="$1"
+    [ "$(awk -F. '{print NF-1}' <<<"$(sed -nE 's/^(.*:\/\/)?([^\/]*).*/\2/p' <<<"$target")")" -lt 2 ] && \
+        target="$(sed -nE 's!^([^:/?#]+)://.*!\1!p' <<<"$target")://www.${target#*://}"
+    [[ ${target%%:*} =~ ^https?$ ]] || target="http://${target#*://}"
+    if curl -A'User-Agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:95.0) Gecko/20100101 Firefox/95.0' \
+        -fsIL "$target" &>/dev/null
+    then
+        do_request "url=$target" "$output"
+    else
+        echo "error: not a valid uri or file: $1" >&2
+        exit 1
+    fi
+fi
