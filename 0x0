@@ -35,8 +35,8 @@ fi
 
 output=$(mktemp)
 if [ -z "$1" ]; then
-    error=$(do_request 'file=@-' "$output")
-    exit "$error"
+    do_request 'file=@-' "$output"
+    exit "$?"
 else
     error=0
     while [ "$#" -gt 0 ]; do
