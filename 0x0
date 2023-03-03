@@ -11,9 +11,8 @@ do_request() {
 }
 
 show_help() {
-    echo "usage: 0x0" >&2
-    echo "       0x0 <file_path>" >&2
-    echo "       0x0 <url>" >&2
+    echo "usage: 0x0 <file_path_or_url> [<file_path_or_url_2> ...]" >&2
+    echo "       echo hello there | 0x0" >&2
 }
 
 normalize_url() {
