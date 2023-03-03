@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# vim:et:sw=4:ts=4:fenc=utf-8:
+# vim:et:sw=4:ts=4:fenc=utf-8:tw=78
 # 0x0: quickly upload to 0x0.st (and get nonce)
 
 do_request() {
@@ -7,32 +7,58 @@ do_request() {
     exitcode=$?
     awk <"$2" '/x-token:/ { print $4 }' >&2
     echo "$result"
-    exit $exitcode
+    return $exitcode
 }
 
-if [ $# -gt 1 ] || [ "$1" == '-h' ] || [ "$1" == '--help' ]; then
+show_help() {
     echo "usage: 0x0" >&2
     echo "       0x0 <file_path>" >&2
     echo "       0x0 <url>" >&2
+}
+
+normalize_url() {
+    target="$1"
+    domain="$(sed -nE 's/^(.*:\/\/)?([^\/]*).*/\2/p' <<<"$target")"
+    numparts="$(awk -F. '{print NF-1}' <<<"$domain")"
+    if [ "$numparts" -lt 2 ]; then
+        protocol="$(sed -nE 's!^([^:/?#]+)://.*!\1!p' <<<"$target")"
+        target="$protocol://www.${target#*://}"
+    fi
+    [[ ${target%%:*} =~ ^https?$ ]] || target="http://${target#*://}"
+    printf '%s' "$target" 
+}
+
+if [ "$1" == '-h' ] || [ "$1" == '--help' ]; then
+    show_help
     exit 0
 fi
 
 output=$(mktemp)
 if [ -z "$1" ]; then
-    do_request 'file=@-' "$output"
-elif [ -f "$1" ]; then
-    do_request "file=@$1" "$output"
-else 
-    target="$1"
-    [ "$(awk -F. '{print NF-1}' <<<"$(sed -nE 's/^(.*:\/\/)?([^\/]*).*/\2/p' <<<"$target")")" -lt 2 ] && \
-        target="$(sed -nE 's!^([^:/?#]+)://.*!\1!p' <<<"$target")://www.${target#*://}"
-    [[ ${target%%:*} =~ ^https?$ ]] || target="http://${target#*://}"
-    if curl -A'User-Agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:95.0) Gecko/20100101 Firefox/95.0' \
-        -fsIL "$target" &>/dev/null
-    then
-        do_request "url=$target" "$output"
-    else
-        echo "error: not a valid uri or file: $1" >&2
-        exit 1
-    fi
+    error=$(do_request 'file=@-' "$output")
+    exit "$error"
+else
+    error=0
+    while [ "$#" -gt 0 ]; do
+        if [ -f "$1" ]; then
+            do_request "file=@$1" "$output"
+            err="$?"
+            [ "$err" -ne 0 ] && error="$err"
+        else 
+            target=$(normalize_url "$1")
+            useragent=("User-Agent: Mozilla/5.0"
+                       "(Macintosh; Intel Mac OS X 10.15; rv:95.0)"
+                       "Gecko/20100101 Firefox/95.0")
+            if curl -A"${useragent[*]}" -fsIL "$target" &>/dev/null
+            then
+                do_request "url=$target" "$output"
+                err="$?"
+                [ "$err" -ne 0 ] && error="$err"
+            else
+                echo "error: not a valid uri or file: $1" >&2
+                error=1
+            fi
+        fi
+        shift
+    done
 fi
